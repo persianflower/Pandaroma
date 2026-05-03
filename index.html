@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans" />
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.13"></script>
+  <script src="https://unpkg.com/vue-silentbox@2.3.1/dist/vue-silentbox.min.js"></script>
+  <title>Pick.le: Pick your pics 🥒</title>
+  <style>
+    body        { font-family: "Open Sans", sans-serif; margin: 5%; }
+    .status     { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+    .status.loading  { background: #f0f4ff; color: #3355cc; }
+    .status.error    { background: #fff0f0; color: #cc2233; }
+    .status.empty    { background: #f9f9f9; color: #666; }
+    .meta       { font-size: 12px; color: #999; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <h1>Pick.le: Pick your pics 🥒</h1>
+  <h2>{{ callToAction }}</h2>
+
+  <!-- Loading state -->
+  <div v-if="state === 'loading'" class="status loading">
+    ⏳ Loading photos...
+  </div>
+
+  <!-- Error state -->
+  <div v-else-if="state === 'error'" class="status error">
+    ❌ {{ errorMessage }}
+    <br/>
+    <button @click="loadImages" style="margin-top:8px;">Retry</button>
+  </div>
+
+  <!-- Empty state -->
+  <div v-else-if="state === 'done' && gallery.length === 0" class="status empty">
+    📭 No photos yet — send one to the number!
+  </div>
+
+  <!-- Gallery -->
+  <template v-else-if="state === 'done'">
+    <p class="meta">Showing {{ meta.total }} photo(s)</p>
+    <silent-box :gallery="gallery"></silent-box>
+  </template>
+</div>
+
+<script>
+Vue.use(VueSilentbox.default);
+
+// Schema validator for each gallery item received from the API
+function validateGalleryItem(item) {
+  if (!item || typeof item !== "object")           return false;
+  if (typeof item.src !== "string")                return false;
+  if (!item.src.startsWith("https://"))            return false;
+  if (typeof item.description !== "string")        return false;
+  if (typeof item.alt !== "string")                return false;
+  if (!/^\d+px$/.test(item.thumbnailWidth))        return false;
+  return true;
+}
+
+// Validate the full API response shape
+function validateApiResponse(data) {
+  if (!data || typeof data !== "object")           return false;
+  if (typeof data.ok !== "boolean")                return false;
+  if (!Array.isArray(data.data))                   return false;
+  if (!data.meta || typeof data.meta.total !== "number") return false;
+  return true;
+}
+
+const app = new Vue({
+  el: "#app",
+  data() {
+    return {
+      callToAction: "Submit your photos of pandas!",
+      gallery: [],
+      state: "loading",   // 'loading' | 'done' | 'error'
+      errorMessage: "",
+      meta: { total: 0, skipped: 0 },
+    };
+  },
+  methods: {
+    async loadImages() {
+      this.state = "loading";
+      this.errorMessage = "";
+
+      try {
+        const response = await fetch("/api/pandaaa");
+
+        // 1. Check HTTP level success
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}`);
+        }
+
+        const json = await response.json();
+
+        // 2. Validate overall response shape
+        if (!validateApiResponse(json)) {
+          throw new Error("API response has an unexpected structure");
+        }
+
+        // 3. Check if the backend reported an error
+        if (!json.ok) {
+          throw new Error(json.error?.message || "Unknown server error");
+        }
+
+        // 4. Validate each gallery item — silently drop malformed ones
+        const validItems = json.data.filter(validateGalleryItem);
+        const dropped = json.data.length - validItems.length;
+        if (dropped > 0) console.warn(`Dropped ${dropped} malformed gallery item(s)`);
+
+        this.gallery = validItems;
+        this.meta    = json.meta;
+        this.state   = "done";
+
+      } catch (err) {
+        this.state        = "error";
+        this.errorMessage = err.message || "Something went wrong. Please try again.";
+        console.error("loadImages error:", err);
+      }
+    },
+  },
+  mounted() {
+    this.loadImages();
+  },
+});
+</script>
+</body>
+</html>
