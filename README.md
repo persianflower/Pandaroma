@@ -23,28 +23,47 @@ API contract:
 
 
 Endpoint:  GET /api/pandaaa
+
 Produces:  application/json
 
+
 Success Response (200):
+
   ok:    true
+  
   data:  GalleryItem[]
+  
   meta:
+  
     total:   integer >= 0
+    
     skipped: integer >= 0
 
 GalleryItem:
+
   src:            string (HTTPS URL)
+  
   description:    string
+  
   alt:            string
 
 Error Response (200 with ok: false):
+
   ok:    false
+  
   data:  []
+  
   error:
+  
     code:    string (enum: TWILIO_ERROR | CONFIG_ERROR)
+    
     message: string
+    
   meta:
+  
     total:   0
+    
     skipped: 0
+    
 
 
